@@ -4,14 +4,6 @@
 
 An Agentic AI system that automates insurance damage claim verification using image evidence, claim understanding, semantic reasoning, fraud risk assessment, and explainable AI.
 
-## 🚀 Live Demo
-
-**Streamlit Deployment:**
-
-https://hackerrank-orchestrate-2026-4a7ixwttahgyn3i3hvfhtz.streamlit.app/
-
----
-
 ##   📸 Screenshots
 
 ### Dashboard Overview
@@ -44,34 +36,6 @@ https://hackerrank-orchestrate-2026-4a7ixwttahgyn3i3hvfhtz.streamlit.app/
 
 ![Raw_OUTPUT](screenshots/raw_output.png)
 
-
-
-## 📌 Problem Statement
-
-Insurance companies process thousands of damage claims every day.
-
-Traditional claim verification requires human reviewers to:
-
-* Inspect uploaded evidence
-* Understand customer claims
-* Compare visual and textual information
-* Detect inconsistencies
-* Assess fraud risk
-
-This process is:
-
-* ⏳ Time-consuming
-* 💰 Expensive
-* 📈 Difficult to scale
-* 🚨 Vulnerable to fraudulent claims
-
-The objective of this project is to automate claim verification using an Agentic AI pipeline capable of reasoning across both text and images.
-
----
-
-## 🏗️ Solution Overview
-
-The system is designed as a multi-agent architecture where each agent performs a specialized task.
 
 ### Workflow
 
@@ -301,17 +265,3 @@ requirements.txt
 * Human-in-the-loop review workflow
 
 ---
-
-## 👩‍💻 Author
-
-**Anupriya Ranjan**
-
-Built for **HackerRank Orchestrate 2026**
-
-Exploring Agentic AI, Generative AI, Open Source, and Intelligent Systems.
-
----
-
-## ⭐ Acknowledgements
-
-This project was developed as part of the HackerRank Orchestrate 2026 challenge to explore the application of Agentic AI systems in insurance claim verification and fraud detection.
