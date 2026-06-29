@@ -1,240 +1,216 @@
-# ⚡ AI Multi-Modal Damage Claim Verification System
+# 🛡️ ClaimGuard AI
 
-### HackerRank Orchestrate 2026 Submission
+> **A Multi-Agent AI System for Automated Insurance Claim Verification using Vision-Language Models, Semantic Reasoning, and Explainable AI.**
 
-An Agentic AI system that automates insurance damage claim verification using image evidence, claim understanding, semantic reasoning, fraud risk assessment, and explainable AI.
+ClaimGuard AI is an end-to-end insurance claim verification system that combines computer vision, natural language understanding, semantic matching, fraud assessment, and explainable AI through a collaborative multi-agent architecture.
 
-##   📸 Screenshots
-
-### Dashboard Overview
-![Dashboard](screenshots/dashboard_overview.png)
-
-### System Analytics
-![System](screenshots/system_analytics.png)
-
-### Claim Overview
-
-![Data](screenshots/claim_overview.png)
-![Data](screenshots/claim_overview2.png)
-
-### Claim Inspector
-
-![Inspector](screenshots/claim_inspector.png)
-
-### Claim Analysis
-
-![Claim](screenshots/claim_analysis.png)
-
-### AI Explanation
-![Explanation](screenshots/explanation.png)
-
-### Evidence Viewer
-
-![Evidence](screenshots/evidence.png)
-
-### Raw AI Output
-
-![Raw_OUTPUT](screenshots/raw_output.png)
-
-
-### Workflow
-
-```text
-User Claim
-      ↓
-Claim Agent
-      ↓
-Vision Agent
-      ↓
-Evidence Agent
-      ↓
-Risk Agent
-      ↓
-Decision Agent
-      ↓
-Confidence Scoring
-      ↓
-Fraud Scoring
-      ↓
-Final Verdict
-```
-
-The final verdict is generated using both textual and visual evidence.
+The system analyzes both customer claims and uploaded damage images to determine whether a claim is supported by visual evidence while providing confidence scores, fraud risk estimation, and human-readable explanations.
 
 ---
 
-## 🤖 AI Agents
+# ✨ Features
 
-### 1️⃣ Claim Agent
+* 🤖 Multi-Agent AI Architecture
+* 👁️ Vision-Language Damage Analysis using Gemini
+* 📄 Natural Language Claim Understanding
+* 🔍 Semantic Damage Matching
+* 📑 Evidence Verification
+* 🚨 Fraud Risk Assessment
+* 📊 Confidence Scoring
+* 💡 Explainable AI Decision Making
+* 🖥️ Interactive Streamlit Dashboard
+* ⚡ Image Analysis Caching
 
-Extracts structured damage information from natural language claims.
+---
 
-**Input**
+# 🏗️ System Architecture
 
 ```text
-My car door got dented after an accident.
+                    Customer Claim
+                          │
+                          ▼
+                  📄 Claim Agent
+                          │
+                          ▼
+                 👁️ Vision Agent
+                          │
+                          ▼
+               📑 Evidence Agent
+                          │
+                          ▼
+                 🚨 Risk Agent
+                          │
+                          ▼
+               ✅ Decision Agent
+                          │
+          ┌───────────────┴───────────────┐
+          ▼                               ▼
+ Confidence Score                 Fraud Score
+          │                               │
+          └───────────────┬───────────────┘
+                          ▼
+               Explainable AI Verdict
 ```
 
-**Output**
+---
+
+# 🤖 Multi-Agent Workflow
+
+## 📄 Claim Agent
+
+Extracts structured information from natural language insurance claims.
+
+**Responsibilities**
+
+* Damage extraction
+* Object part identification
+* Claim normalization
+
+Example
 
 ```json
 {
-  "issue_type": "dent",
-  "object_part": "door"
+    "issue_type":"dent",
+    "object_part":"front bumper"
 }
 ```
 
 ---
 
-### 2️⃣ Vision Agent
+## 👁️ Vision Agent
 
-Analyzes uploaded images using Gemini Vision.
+Uses Gemini Vision to inspect uploaded evidence images.
 
-Extracts:
+Outputs
 
-* Damage type
-* Damaged object part
-* Severity
+* Damage category
+* Damaged component
+* Severity estimation
 * Image validity
-* Damage visibility
+* Visible damage detection
 
 ---
 
-### 3️⃣ Evidence Agent
+## 📑 Evidence Agent
 
-Evaluates whether the uploaded evidence sufficiently supports the claim.
+Evaluates whether uploaded images sufficiently support the customer's claim.
 
-Checks:
+Checks
 
-* Damage visibility
-* Image validity
+* Visible damage
+* Image quality
 * Evidence consistency
 
 ---
 
-### 4️⃣ Risk Agent
+## 🚨 Risk Agent
 
-Identifies suspicious patterns and risk indicators.
+Identifies potential fraud indicators.
 
-Examples:
+Examples
 
-* Ambiguous claims
-* High-risk wording
+* Ambiguous language
+* Suspicious wording
 * Missing evidence
-* Manual review triggers
+* Manual review requirements
 
 ---
 
-### 5️⃣ Decision Agent
+## ✅ Decision Agent
 
-Produces one of the following outcomes:
+Combines outputs from all previous agents to generate the final decision.
 
-| Verdict                | Description                       |
-| ---------------------- | --------------------------------- |
-| Supported              | Claim aligns with visual evidence |
-| Contradicted           | Claim conflicts with evidence     |
-| Not Enough Information | Evidence is insufficient          |
+Possible Results
+
+| Decision                  | Description                        |
+| ------------------------- | ---------------------------------- |
+| ✅ Supported               | Visual evidence supports the claim |
+| ❌ Contradicted            | Evidence conflicts with the claim  |
+| ⚠️ Not Enough Information | Manual review recommended          |
 
 ---
 
-## 🧠 Semantic Damage Matching
+# 🧠 Semantic Reasoning
 
-The system performs semantic reasoning instead of strict keyword matching.
+Rather than relying on exact keyword matching, ClaimGuard AI performs semantic matching between textual claims and detected visual damage.
 
-Examples:
+Examples
 
 ```text
-dent ≈ deformation
-broken_part ≈ missing_part
-glass_shatter ≈ crack
+Dent
+↕
+Broken Part
+↕
+
+Structural Damage
 ```
 
-This improves robustness when claim descriptions and visual outputs use different terminology.
+```text
+Glass Shatter
+↕
+Crack
+```
+
+This improves robustness when users describe damage differently from what the vision model detects.
 
 ---
 
-## 📊 Key Features
+# 📊 Dashboard
 
-* ✅ Multi-Modal AI (Vision + Text)
-* ✅ Agent-Based Architecture
-* ✅ Semantic Damage Matching
-* ✅ Confidence Scoring
-* ✅ Fraud Risk Assessment
-* ✅ Explainable AI
-* ✅ Streamlit Dashboard
-* ✅ Evidence Validation
-* ✅ Image Analysis Caching
-* ✅ Interactive Claim Inspector
+The interactive Streamlit dashboard provides:
 
----
-
-## 🖥️ Dashboard Features
-
-The Streamlit application provides:
-
-### 📋 Claim Overview Table
-
-View all processed claims and system decisions.
-
-### 🔍 Deep Claim Inspector
-
-Inspect individual claims with detailed AI analysis.
-
-### 🧠 Confidence Visualization
-
-Displays model confidence for each decision.
-
-### 🚨 Fraud Risk Meter
-
-Shows estimated fraud risk score.
-
-### 🖼️ Evidence Viewer
-
-Displays uploaded claim images.
-
-### 🤖 AI Explanation Engine
-
-Provides human-readable reasoning behind each verdict.
-
-### 🎬 Guided Judge Demo Mode
-
-Walkthrough of the complete AI reasoning pipeline.
+* 📂 Claims Overview
+* 📈 Performance Dashboard
+* 🔍 Claim Investigation Panel
+* 🤖 AI Assessment
+* 📊 Confidence Visualization
+* 🚨 Fraud Risk Meter
+* 🖼️ Evidence Viewer
+* 💡 Explainable AI
+* 🧠 Agent Debug Output
 
 ---
 
-## 📂 Project Structure
+# 📂 Project Structure
 
 ```text
-code/
+ClaimGuard-AI/
+
 │
-├── agents/
-│   ├── claim_agent.py
-│   ├── vision_agent.py
-│   ├── evidence_agent.py
-│   ├── risk_agent.py
-│   └── decision_agent.py
+├── code/
+│   ├── agents/
+│   │   ├── claim_agent.py
+│   │   ├── vision_agent.py
+│   │   ├── evidence_agent.py
+│   │   ├── risk_agent.py
+│   │   ├── decision_agent.py
+│   │   └── semantic_matcher.py
+│   │
+│   ├── generate_output.py
+│   ├── ui_app.py
+│   ├── output.csv
+│   └── cache/
 │
-├── cache/
+├── dataset/
+│   ├── claims.csv
+│   ├── images/
+│   └── ...
 │
-├── generate_output.py
-├── ui_app.py
-├── output.csv
+├── screenshots/
 │
-dataset/
-│
-README.md
-requirements.txt
+├── requirements.txt
+└── README.md
 ```
 
 ---
 
+# 🛠️ Technology Stack
 
-## 🛠️ Technologies Used
+### AI
 
-### AI & Machine Learning
-
-* Gemini Vision API
-* Agentic AI Architecture
+* Google Gemini 2.5 Flash
+* Agentic AI
+* Vision-Language Models
 
 ### Backend
 
@@ -243,6 +219,7 @@ requirements.txt
 ### Data Processing
 
 * Pandas
+* NumPy
 
 ### Frontend
 
@@ -254,14 +231,19 @@ requirements.txt
 
 ---
 
-## 📈 Future Improvements
 
-* Fine-grained severity estimation
-* Advanced fraud detection models
-* Hybrid vision ensemble models
-* Enhanced semantic reasoning
-* Multi-image evidence fusion
-* Real-time claim processing APIs
-* Human-in-the-loop review workflow
+
+# 🔮 Roadmap
+
+* Reflection Agent
+* Multi-image Evidence Fusion
+* Human-in-the-loop Review
+* PDF Claim Reports
+* Live Claim Processing
+* Advanced Fraud Detection
+* Temporal Damage Verification
+* REST API Deployment
 
 ---
+
+
