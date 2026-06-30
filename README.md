@@ -246,4 +246,14 @@ ClaimGuard-AI/
 
 ---
 
+---
+
+# 👨‍💻 Author
+
+**Pranjal Tyagi**
+
+AI & Machine Learning Engineer | B.Tech CSE (AI & DS)
+---
+
+
 
