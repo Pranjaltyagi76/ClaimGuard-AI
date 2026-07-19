@@ -35,6 +35,10 @@ RETRY_BASE_DELAY = 8  # seconds; doubles each retry (8, 16, 32, ...)
 # Proactive throttle to stay under free-tier RPM (~10/min). Configurable.
 THROTTLE_DELAY = float(os.getenv("GEMINI_THROTTLE", "5"))
 
+# Cache-only mode: never call the API; uncached images honestly report as
+# not-yet-analyzed (-> not_enough_information / manual review downstream).
+CACHE_ONLY = os.getenv("VISION_CACHE_ONLY", "0") == "1"
+
 model = genai.GenerativeModel(MODEL_NAME)
 
 
@@ -72,6 +76,20 @@ def analyze_image(image_path):
 
         except Exception:
             pass
+
+    # ------------------------------
+    # Cache-Only Mode (no API calls)
+    # ------------------------------
+    if CACHE_ONLY:
+        # Not analyzed yet -> report honestly; do NOT invent a result.
+        return {
+            "valid_image": False,
+            "issue_type": "unknown",
+            "object_part": "unknown",
+            "severity": "unknown",
+            "damage_visible": False,
+            "risk_flags": ["manual_review_required"]
+        }
 
     # ------------------------------
     # Mock Mode
@@ -242,16 +260,18 @@ Rules:
     # ------------------------------
     # Save Cache
     # ------------------------------
-    try:
+    # Only cache REAL analyses. Caching the error fallback would poison the
+    # cache: a transient rate-limit failure would look permanent on re-runs.
+    is_error_fallback = (
+        not result.get("valid_image", False)
+        and result.get("issue_type") == "unknown"
+    )
 
-        with open(cache_path, "w") as f:
-            json.dump(
-                result,
-                f,
-                indent=2
-            )
-
-    except Exception:
-        pass
+    if not is_error_fallback:
+        try:
+            with open(cache_path, "w") as f:
+                json.dump(result, f, indent=2)
+        except Exception:
+            pass
 
     return result

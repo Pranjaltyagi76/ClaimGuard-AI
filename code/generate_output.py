@@ -122,8 +122,8 @@ def generate_explanation(claim_issue, vision_issue, status, confidence, ids):
     if status == "contradicted":
         return (f"CONTRADICTED: the image evidence shows '{vision_issue}', which "
                 f"does not match the claimed '{claim_issue}'{id_hint}.")
-    return ("NOT ENOUGH INFORMATION: image evidence was insufficient or "
-            "unreadable; manual review recommended.")
+    return ("NOT ENOUGH INFORMATION: image evidence could not be conclusively "
+            "analyzed; routed to manual review.")
 
 
 # ---------------------------
