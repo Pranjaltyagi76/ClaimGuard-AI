@@ -1,5 +1,18 @@
-import pandas as pd
+"""ClaimGuard AI - batch pipeline.
+
+Reads dataset/claims.csv, runs the multi-agent pipeline on every claim, and
+writes TWO files:
+
+1. ../output.csv        -> spec-compliant submission (14 columns, exact order)
+2. output.csv (here)    -> enriched view (adds confidence/fraud/explanation)
+                           consumed by the Streamlit dashboard (ui_app.py)
+
+Which stages use AI vs deterministic logic is documented in the README.
+"""
+
 import os
+import pandas as pd
+
 from agents.claim_agent import extract_claim
 from agents.vision_agent import analyze_image
 from agents.evidence_agent import check_evidence_standard
@@ -7,210 +20,238 @@ from agents.risk_agent import analyze_user_risk
 from agents.decision_agent import decide
 
 DATA_PATH = "../dataset/claims.csv"
+HISTORY_PATH = "../dataset/user_history.csv"
 IMAGE_BASE = "../dataset"
-OUTPUT_PATH = "output.csv"
+
+SPEC_OUTPUT_PATH = "../output.csv"        # submission artifact
+UI_OUTPUT_PATH = "output.csv"             # dashboard artifact
+
+# Required submission columns, in the exact order the problem statement asks for.
+SPEC_COLUMNS = [
+    "user_id",
+    "image_paths",
+    "user_claim",
+    "claim_object",
+    "evidence_standard_met",
+    "evidence_standard_met_reason",
+    "risk_flags",
+    "issue_type",
+    "object_part",
+    "claim_status",
+    "claim_status_justification",
+    "supporting_image_ids",
+    "valid_image",
+    "severity",
+]
+
+ALLOWED_PARTS = {
+    "car": {"front_bumper", "rear_bumper", "door", "hood", "windshield",
+            "side_mirror", "headlight", "taillight", "fender", "quarter_panel",
+            "body", "unknown"},
+    "laptop": {"screen", "keyboard", "trackpad", "hinge", "lid", "corner",
+               "port", "base", "body", "unknown"},
+    "package": {"box", "package_corner", "package_side", "seal", "label",
+                "contents", "item", "unknown"},
+}
 
 
 # ---------------------------
-# Semantic Matching (your logic kept)
+# Helpers
 # ---------------------------
+def image_id_of(path):
+    """Image ID = filename without extension, e.g. img_1."""
+    base = os.path.basename(path.strip())
+    return os.path.splitext(base)[0]
+
+
+def get_image_list(image_paths):
+    return [p.strip() for p in str(image_paths).split(";") if p.strip()]
+
+
+def validate_part(part, claim_object):
+    part = (part or "unknown").strip().lower().replace(" ", "_")
+    allowed = ALLOWED_PARTS.get(claim_object, set())
+    return part if part in allowed else "unknown"
+
+
 def semantic_match(claim_issue, vision_issue):
     if not claim_issue or not vision_issue:
         return False, None
-
     if claim_issue == vision_issue:
         return True, claim_issue
-
     claim_tokens = set(claim_issue.lower().split("_"))
     vision_tokens = set(vision_issue.lower().split("_"))
-    common_tokens = claim_tokens.intersection(vision_tokens)
-
-    if common_tokens:
-        return True, "_".join(sorted(common_tokens))
-
+    common = claim_tokens.intersection(vision_tokens)
+    if common:
+        return True, "_".join(sorted(common))
     return False, None
 
 
-# ---------------------------
-# Fraud Score Engine (UPGRADE 1)
-# ---------------------------
-def compute_fraud_score(claim_status, severity, confidence):
+def compute_confidence(claim_issue, vision_issue, matched):
+    if vision_issue in (None, "unknown"):
+        return 0.50
+    if claim_issue == vision_issue:
+        return 0.95
+    if matched:
+        return 0.80
+    return 0.25
 
+
+def compute_fraud_score(claim_status, confidence, risk_flags):
     score = 0
-
-    # decision impact
     if claim_status == "contradicted":
         score += 70
     elif claim_status == "supported":
         score += 20
     else:
         score += 50
-
-    # uncertainty impact
     score += (1 - confidence) * 30
-
-    # severity impact
-    if severity == "medium":
+    if "manual_review_required" in risk_flags:
         score += 10
+    if "text_instruction_present" in risk_flags:
+        score += 15
+    return round(min(100, max(0, score)), 2)
 
-    return min(100, max(0, score))
 
-
-# ---------------------------
-# Explanation Engine (UPGRADE 2)
-# ---------------------------
-def generate_explanation(claim_info, vision_info, decision, confidence):
-
-    claim_issue = claim_info.get("issue_type")
-    vision_issue = vision_info.get("issue_type")
-
-    if decision["claim_status"] == "supported":
-        return (
-            f"The claim is SUPPORTED because visual evidence shows '{vision_issue}' "
-            f"which aligns with the claimed damage '{claim_issue}'. "
-            f"Confidence level is {round(confidence * 100)}%, indicating strong agreement."
-        )
-
-    elif decision["claim_status"] == "contradicted":
-        return (
-            f"The claim is CONTRADICTED because the image shows '{vision_issue}' "
-            f"which does not match the claimed damage '{claim_issue}'. "
-            f"Low semantic similarity detected between claim and evidence."
-        )
-
-    else:
-        return (
-            f"The system is UNCERTAIN due to unclear or weak visual evidence. "
-            f"Manual review recommended."
-        )
+def generate_explanation(claim_issue, vision_issue, status, confidence, ids):
+    id_hint = f" (see image {', '.join(ids)})" if ids else ""
+    if status == "supported":
+        return (f"SUPPORTED: the image evidence shows '{vision_issue}', which "
+                f"aligns with the claimed '{claim_issue}'{id_hint}. "
+                f"Confidence {round(confidence * 100)}%.")
+    if status == "contradicted":
+        return (f"CONTRADICTED: the image evidence shows '{vision_issue}', which "
+                f"does not match the claimed '{claim_issue}'{id_hint}.")
+    return ("NOT ENOUGH INFORMATION: image evidence was insufficient or "
+            "unreadable; manual review recommended.")
 
 
 # ---------------------------
-# Image helper
-# ---------------------------
-def get_first_image(image_paths):
-    return os.path.join(IMAGE_BASE, image_paths.split(";")[0].strip())
-
-
-# ---------------------------
-# Main Pipeline
+# Main pipeline
 # ---------------------------
 def run_pipeline():
-
     df = pd.read_csv(DATA_PATH)
-    results = []
+
+    history = None
+    if os.path.exists(HISTORY_PATH):
+        try:
+            history = pd.read_csv(HISTORY_PATH).set_index("user_id")
+        except Exception:
+            history = None
+
+    spec_rows = []
+    ui_rows = []
 
     for _, row in df.iterrows():
-
         user_id = row["user_id"]
         claim_text = row["user_claim"]
-        claim_object = row["claim_object"]
+        claim_object = str(row["claim_object"]).strip().lower()
 
-        # 1. Claim Agent
+        # ---- 1. Claim Agent (deterministic NLP) ----
         claim_info = extract_claim(claim_text)
+        claim_issue = claim_info.get("issue_type")
+        object_part = validate_part(claim_info.get("object_part"), claim_object)
 
-        # 2. Vision Agent
-        image_path = get_first_image(row["image_paths"])
-        vision_info = analyze_image(image_path)
-        print("=" * 60)
-        print("USER:", user_id)
-        print("CLAIM ISSUE:", claim_info.get("issue_type"))
-        print("VISION ISSUE:", vision_info.get("issue_type"))
-        print("VISION INFO:", vision_info)
+        # ---- 2. Vision Agent (AI - Gemini) over ALL images ----
+        image_rel_paths = get_image_list(row["image_paths"])
+        best_vision = None
+        supporting_ids = []
 
-        # 3. Evidence Agent
+        for rel in image_rel_paths:
+            full = os.path.join(IMAGE_BASE, rel)
+            vinfo = analyze_image(full)
+            if best_vision is None:
+                best_vision = vinfo
+            # Prefer an image that actually shows damage.
+            if vinfo.get("damage_visible") and vinfo.get("valid_image"):
+                best_vision = vinfo
+                supporting_ids.append(image_id_of(rel))
+
+        if best_vision is None:
+            best_vision = {"valid_image": False, "issue_type": "unknown",
+                           "severity": "unknown", "damage_visible": False}
+
+        vision_issue = best_vision.get("issue_type", "unknown")
+        severity = best_vision.get("severity", "unknown")
+        valid_image = bool(best_vision.get("valid_image", False))
+
+        # ---- 3. Evidence Agent ----
         evidence_met, evidence_reason = check_evidence_standard(
-            claim_info,
-            vision_info
+            claim_info, best_vision
         )
 
-        # 4. Risk Agent
-        risk_flags = analyze_user_risk(row)
+        # ---- 4. Risk Agent (with user history if available) ----
+        risk_row = row.to_dict()
+        if history is not None and user_id in history.index:
+            for col, val in history.loc[user_id].to_dict().items():
+                risk_row.setdefault(col, val)
+        risk_flags = analyze_user_risk(risk_row)
 
-        # 5. Decision Agent
-        decision = decide(
-            claim_info,
-            vision_info,
-            claim_object
-        )
+        # ---- 5. Decision Agent ----
+        decision = decide(claim_info, best_vision, claim_object)
+        status = decision["claim_status"]
 
-        # ---------------------------
-        # Semantic + Confidence
-        # ---------------------------
-        
-        matched, family = semantic_match(
-          claim_info.get("issue_type"),
-          vision_info.get("issue_type")
-        )
+        matched, _ = semantic_match(claim_issue, vision_issue)
+        confidence = compute_confidence(claim_issue, vision_issue, matched)
+        fraud_score = compute_fraud_score(status, confidence, risk_flags)
 
-        if claim_info.get("issue_type") == vision_info.get("issue_type"):
-         confidence = 0.95
+        if not supporting_ids and status == "supported" and image_rel_paths:
+            supporting_ids = [image_id_of(image_rel_paths[0])]
 
-        elif matched:
-         confidence = 0.80
+        supporting_str = ";".join(supporting_ids) if supporting_ids else "none"
 
-        elif vision_info.get("issue_type") == "unknown":
-         confidence = 0.50
+        # Output issue_type = the visible (vision) issue when known, else claim.
+        out_issue = vision_issue if vision_issue not in (None, "unknown") else claim_issue
 
-        else:
-         confidence = 0.25
-
-
-        # ---------------------------
-        # NEW: Fraud Score
-        # ---------------------------
-        fraud_score = compute_fraud_score(
-          decision["claim_status"],
-          vision_info.get("severity", "medium"),
-          confidence
-        )
-
-        if "manual_review_required" in risk_flags:
-         fraud_score = min(100, fraud_score + 10)
-
-        # ---------------------------
-        # NEW: Explanation
-        # ---------------------------
         explanation = generate_explanation(
-            claim_info,
-            vision_info,
-            decision,
-            confidence
+            claim_issue, vision_issue, status, confidence, supporting_ids
         )
 
-        # ---------------------------
-        # Store result
-        # ---------------------------
-        results.append({
-         "user_id": user_id,
-         "image_paths": row["image_paths"],
-         "user_claim": claim_text,
-         "claim_object": claim_object,
-
-         "issue_type": claim_info.get("issue_type"),
-         "object_part": claim_info.get("object_part"),
-
-         "valid_image": vision_info.get("valid_image"),
-         "severity": vision_info.get("severity"),
-
-         "risk_flags": str(risk_flags),
-
-         "evidence_standard_met": evidence_met,
-         "evidence_standard_met_reason": evidence_reason,
-
-         "claim_status": decision["claim_status"],
-         "claim_status_justification": decision["reason"],
-
-         "confidence_score": round(confidence, 2),
-         "fraud_score": round(fraud_score, 2),
-
-         "ai_explanation": explanation
+        # ---- Spec row (submission) ----
+        spec_rows.append({
+            "user_id": user_id,
+            "image_paths": row["image_paths"],
+            "user_claim": claim_text,
+            "claim_object": claim_object,
+            "evidence_standard_met": str(bool(evidence_met)).lower(),
+            "evidence_standard_met_reason": evidence_reason,
+            "risk_flags": ";".join(risk_flags),
+            "issue_type": out_issue,
+            "object_part": object_part,
+            "claim_status": status,
+            "claim_status_justification": explanation,
+            "supporting_image_ids": supporting_str,
+            "valid_image": str(valid_image).lower(),
+            "severity": severity,
         })
 
-    out_df = pd.DataFrame(results)
-    out_df.to_csv(OUTPUT_PATH, index=False)
+        # ---- Enriched row (dashboard) ----
+        ui_rows.append({
+            "user_id": user_id,
+            "image_paths": row["image_paths"],
+            "user_claim": claim_text,
+            "claim_object": claim_object,
+            "issue_type": out_issue,
+            "object_part": object_part,
+            "valid_image": valid_image,
+            "severity": severity,
+            "risk_flags": ";".join(risk_flags),
+            "evidence_standard_met": bool(evidence_met),
+            "evidence_standard_met_reason": evidence_reason,
+            "claim_status": status,
+            "claim_status_justification": decision["reason"],
+            "supporting_image_ids": supporting_str,
+            "confidence_score": round(confidence, 2),
+            "fraud_score": fraud_score,
+            "ai_explanation": explanation,
+        })
 
-    print("✅ output.csv generated successfully!")
+        print(f"{user_id}: claim={claim_issue} vision={vision_issue} -> {status}")
+
+    pd.DataFrame(spec_rows)[SPEC_COLUMNS].to_csv(SPEC_OUTPUT_PATH, index=False)
+    pd.DataFrame(ui_rows).to_csv(UI_OUTPUT_PATH, index=False)
+
+    print(f"\nWrote {SPEC_OUTPUT_PATH} (submission) and {UI_OUTPUT_PATH} (dashboard).")
 
 
 if __name__ == "__main__":

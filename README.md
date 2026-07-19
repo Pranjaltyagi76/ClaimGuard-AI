@@ -6,6 +6,10 @@ ClaimGuard AI is an end-to-end insurance claim verification system that combines
 
 The system analyzes both customer claims and uploaded damage images to determine whether a claim is supported by visual evidence while providing confidence scores, fraud risk estimation, and human-readable explanations.
 
+> 🌍 **Live demo:** _add your Streamlit URL here after deploying_ &nbsp;•&nbsp; 📖 [The story behind it](HOW_I_BUILT_THIS.md) &nbsp;•&nbsp; 📊 [Evaluation & cost analysis](evaluation/evaluation_report.md)
+
+**The problem, in one line:** filing insurance claims with *fake or recycled damage photos* is a real, expensive fraud (the idea came from a phone showroom in Ghaziabad — see [the story](HOW_I_BUILT_THIS.md)). ClaimGuard AI reads the claim, inspects the images, and decides whether the evidence actually **supports**, **contradicts**, or is **insufficient** for the claim — and it would rather ask for human review than approve something it isn't sure about.
+
 ---
 
 # ✨ Features
@@ -232,6 +236,54 @@ ClaimGuard-AI/
 ---
 
 
+
+# 🧩 What uses AI vs deterministic logic (honest breakdown)
+
+A deliberate design choice: only the stage that *needs* a multimodal model uses one. Everything else is fast, free, reproducible, and auditable — so cost scales with the number of **images**, not the number of steps.
+
+| Stage | Type | Model call? |
+| --- | --- | --- |
+| 📄 Claim Agent | Deterministic NLP (transcript parsing) | No |
+| 👁️ Vision Agent | **Gemini vision** | **Yes — 1 per image** |
+| 📑 Evidence Agent | Deterministic rules | No |
+| 🚨 Risk Agent | Deterministic rules (fraud + prompt-injection + history) | No |
+| ✅ Decision Agent | Deterministic rules | No |
+
+Full cost, token, latency, and rate-limit analysis: [`evaluation/evaluation_report.md`](evaluation/evaluation_report.md).
+
+---
+
+# ▶️ Run Locally
+
+```bash
+git clone https://github.com/Pranjaltyagi76/ClaimGuard-AI.git
+cd ClaimGuard-AI
+pip install -r requirements.txt
+
+# Add your Gemini key (only needed to re-run vision analysis)
+echo "GEMINI_API_KEY=your_key_here" > .env
+
+# 1) Launch the dashboard (reads the precomputed results)
+streamlit run code/ui_app.py
+
+# 2) (Optional) Regenerate real results from the images
+cd code
+python generate_output.py     # writes ../output.csv + code/output.csv
+```
+
+Get a free Gemini API key at https://aistudio.google.com/app/apikey.
+
+---
+
+# 🚀 Deploy (Streamlit Community Cloud — free)
+
+1. Push this repo to GitHub (public).
+2. Go to https://share.streamlit.io → **New app**.
+3. Repo: `Pranjaltyagi76/ClaimGuard-AI` · Branch: `main` · Main file: `code/ui_app.py`.
+4. (Optional) In **Advanced settings → Secrets**, add `GEMINI_API_KEY = "..."`.
+5. Deploy — the dashboard runs on the committed `output.csv` + images, so it works even without a key.
+
+---
 
 # 🔮 Roadmap
 

@@ -19,7 +19,12 @@ genai.configure(
     api_key=os.getenv("GEMINI_API_KEY")
 )
 
-model = genai.GenerativeModel("gemini-2.5-flash")
+# Model is configurable via env so we can swap without editing code.
+# gemini-1.5-flash is broadly available on google-generativeai 0.8.x and
+# supports vision. Override with GEMINI_MODEL if you have 2.0/2.5 access.
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+
+model = genai.GenerativeModel(MODEL_NAME)
 
 
 # ----------------------------------
@@ -169,7 +174,11 @@ Rules:
         print(f"Analyzing image: {image_path}")
 
         response = model.generate_content(
-            [prompt, image]
+            [prompt, image],
+            generation_config={
+                "response_mime_type": "application/json",
+                "temperature": 0,
+            },
         )
 
         clean_text = (
@@ -185,13 +194,16 @@ Rules:
 
         print("VISION ERROR:", e)
 
-        # Graceful fallback
+        # HONEST fallback: if the model call fails we must NOT invent a
+        # damage type. Returning "unknown" lets the decision layer downgrade
+        # the claim to not_enough_information instead of silently fabricating
+        # "broken_part" for every row.
         result = {
-            "valid_image": True,
-            "issue_type": "broken_part",
-            "object_part": "visible_damage",
-            "severity": "medium",
-            "damage_visible": True,
+            "valid_image": False,
+            "issue_type": "unknown",
+            "object_part": "unknown",
+            "severity": "unknown",
+            "damage_visible": False,
             "risk_flags": ["manual_review_required"]
         }
 
