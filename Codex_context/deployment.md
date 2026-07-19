@@ -54,7 +54,8 @@ Then commit both CSVs and push → the live app updates.
 | Variable | Purpose | Where |
 | --- | --- | --- |
 | `GEMINI_API_KEY` | Gemini access for vision | `.env` / Streamlit Secrets |
-| `GEMINI_MODEL` | Override vision model (default `gemini-1.5-flash`) | `.env` (optional) |
+| `GEMINI_MODEL` | Override vision model (default `gemini-2.5-flash`) | `.env` (optional) |
+| `GEMINI_THROTTLE` | Seconds between vision calls (default `5`, for free-tier RPM) | `.env` (optional) |
 
 ## Rollback
 

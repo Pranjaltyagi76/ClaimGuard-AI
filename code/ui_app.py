@@ -2,6 +2,10 @@ import streamlit as st
 import pandas as pd
 import os
 from PIL import Image
+try:
+    import pillow_avif  # noqa: F401 - dataset images are AVIF (with .jpg names)
+except ImportError:
+    pass
 
 # -----------------------------------
 # PAGE CONFIG

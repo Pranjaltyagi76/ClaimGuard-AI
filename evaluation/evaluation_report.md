@@ -50,8 +50,9 @@ latency proportional to the number of *images*, not the number of *stages*.
 
 ## 4. Token & cost estimate
 
-Pricing assumption: **Gemini 1.5 Flash**, approx. **$0.075 / 1M input tokens**
-and **$0.30 / 1M output tokens** (image input billed as tokens by resolution).
+Pricing assumption: **Gemini 2.5 Flash** (the model actually used), approx.
+**$0.30 / 1M input tokens** and **$2.50 / 1M output tokens** (image input
+billed as tokens by resolution).
 
 Per image (approx.):
 
@@ -63,11 +64,11 @@ Per image (approx.):
 |---|---|---|
 | Input tokens | ~1,000 | ~82,000 |
 | Output tokens | ~80 | ~6,560 |
-| Input cost | — | ~$0.0062 |
-| Output cost | — | ~$0.0020 |
-| **Total** | — | **≈ $0.008 (well under 1 cent)** |
+| Input cost | — | ~$0.025 |
+| Output cost | — | ~$0.016 |
+| **Total** | — | **≈ $0.04 (a few cents)** |
 
-Even at 10× the volume this stays under $0.10, so cost is not the binding
+Even at 10× the volume this stays under $0.50, so cost is not the binding
 constraint — rate limits and latency are.
 
 ---

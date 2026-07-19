@@ -1,6 +1,11 @@
 import os
 import json
+import time
 from PIL import Image
+try:
+    import pillow_avif  # noqa: F401 - registers AVIF support with Pillow
+except ImportError:
+    pass
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -20,9 +25,15 @@ genai.configure(
 )
 
 # Model is configurable via env so we can swap without editing code.
-# gemini-1.5-flash is broadly available on google-generativeai 0.8.x and
-# supports vision. Override with GEMINI_MODEL if you have 2.0/2.5 access.
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+# gemini-2.5-flash is vision-capable and available on current free-tier keys.
+# Override with GEMINI_MODEL (e.g. gemini-flash-latest) if you prefer.
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+# Rate-limit handling for the batch run.
+MAX_RETRIES = 5
+RETRY_BASE_DELAY = 8  # seconds; doubles each retry (8, 16, 32, ...)
+# Proactive throttle to stay under free-tier RPM (~10/min). Configurable.
+THROTTLE_DELAY = float(os.getenv("GEMINI_THROTTLE", "5"))
 
 model = genai.GenerativeModel(MODEL_NAME)
 
@@ -173,13 +184,34 @@ Rules:
 
         print(f"Analyzing image: {image_path}")
 
-        response = model.generate_content(
-            [prompt, image],
-            generation_config={
-                "response_mime_type": "application/json",
-                "temperature": 0,
-            },
-        )
+        if THROTTLE_DELAY > 0:
+            time.sleep(THROTTLE_DELAY)
+
+        # Retry with exponential backoff on rate limits (HTTP 429). Free-tier
+        # keys allow only a handful of requests per minute, so a transient 429
+        # should wait and retry rather than fall through to the honest fallback.
+        last_err = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = model.generate_content(
+                    [prompt, image],
+                    generation_config={
+                        "response_mime_type": "application/json",
+                        "temperature": 0,
+                    },
+                )
+                break
+            except Exception as call_err:
+                last_err = call_err
+                if "429" in str(call_err) and attempt < MAX_RETRIES - 1:
+                    wait = RETRY_BASE_DELAY * (2 ** attempt)
+                    print(f"  rate limited, retrying in {wait}s "
+                          f"(attempt {attempt + 1}/{MAX_RETRIES})")
+                    time.sleep(wait)
+                    continue
+                raise
+        else:
+            raise last_err
 
         clean_text = (
             response.text
