@@ -1,0 +1,11 @@
+{
+  "valid_image": true,
+  "issue_type": "water_damage",
+  "object_part": "packaging",
+  "severity": "medium",
+  "damage_visible": true,
+  "risk_flags": [
+    "content_damage_risk",
+    "structural_weakening"
+  ]
+}

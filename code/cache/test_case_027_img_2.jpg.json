@@ -1,0 +1,8 @@
+{
+  "valid_image": true,
+  "issue_type": "broken_part",
+  "object_part": "screen",
+  "severity": "medium",
+  "damage_visible": true,
+  "risk_flags": []
+}

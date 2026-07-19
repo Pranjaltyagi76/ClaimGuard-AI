@@ -1,0 +1,11 @@
+{
+  "valid_image": true,
+  "issue_type": "glass_shatter",
+  "object_part": "headlight",
+  "severity": "high",
+  "damage_visible": true,
+  "risk_flags": [
+    "structural_damage_potential",
+    "electrical_damage_potential"
+  ]
+}

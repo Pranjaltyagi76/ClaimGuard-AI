@@ -1,0 +1,12 @@
+{
+  "valid_image": true,
+  "issue_type": "broken_part",
+  "object_part": "laptop chassis",
+  "severity": "high",
+  "damage_visible": true,
+  "risk_flags": [
+    "exposed internal components",
+    "structural failure",
+    "potential electrical hazard"
+  ]
+}

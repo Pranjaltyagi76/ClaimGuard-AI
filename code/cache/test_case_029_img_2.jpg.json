@@ -1,0 +1,11 @@
+{
+  "valid_image": true,
+  "issue_type": "crushed_packaging",
+  "object_part": "top right corner of the cardboard box",
+  "severity": "medium",
+  "damage_visible": true,
+  "risk_flags": [
+    "potential damage to fragile contents",
+    "compromised structural integrity of packaging"
+  ]
+}

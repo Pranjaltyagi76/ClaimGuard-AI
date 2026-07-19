@@ -30,8 +30,8 @@ Thumbs.db
 *.csv
 !output.csv
 
-# Large cache files
-cache/
+# Vision cache is committed on purpose: it lets the deployed app show real
+# results for sample images without any live API call.
 
 # Python build files
 build/

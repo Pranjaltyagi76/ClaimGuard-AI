@@ -1,0 +1,10 @@
+{
+  "valid_image": true,
+  "issue_type": "crushed_packaging",
+  "object_part": "packaging",
+  "severity": "medium",
+  "damage_visible": true,
+  "risk_flags": [
+    "potential_content_damage"
+  ]
+}

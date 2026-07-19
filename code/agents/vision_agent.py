@@ -48,14 +48,16 @@ model = genai.GenerativeModel(MODEL_NAME)
 # ----------------------------------
 
 def get_cache_path(image_path):
-    image_id = image_path.replace("\\", "_")
-    image_id = image_id.replace("/", "_")
-    image_id = image_id.replace(":", "_")
+    # Key on the last 3 path components (e.g. test/case_004/img_1.jpg) so the
+    # cache is STABLE across machines. Keying on the full absolute path meant a
+    # cached result on one machine never matched the same image on another
+    # (e.g. local "../dataset/..." vs the cloud "/mount/src/.../dataset/...").
+    norm = str(image_path).replace("\\", "/")
+    parts = [p for p in norm.split("/") if p and p not in (".", "..")]
+    key = "_".join(parts[-3:]) if len(parts) >= 3 else "_".join(parts)
+    key = key.replace(":", "_")
 
-    return os.path.join(
-        CACHE_DIR,
-        image_id + ".json"
-    )
+    return os.path.join(CACHE_DIR, key + ".json")
 
 
 # ----------------------------------
@@ -77,6 +79,19 @@ def analyze_image(image_path):
 
         except Exception:
             pass
+
+    # ------------------------------
+    # No API key -> never attempt a network call (would hang the UI).
+    # ------------------------------
+    if not os.getenv("GEMINI_API_KEY"):
+        return {
+            "valid_image": False,
+            "issue_type": "unknown",
+            "object_part": "unknown",
+            "severity": "unknown",
+            "damage_visible": False,
+            "risk_flags": ["manual_review_required"],
+        }
 
     # ------------------------------
     # Cache-Only Mode (no API calls)

@@ -1,0 +1,11 @@
+{
+  "valid_image": true,
+  "issue_type": "glass_shatter",
+  "object_part": "screen",
+  "severity": "high",
+  "damage_visible": true,
+  "risk_flags": [
+    "sharp_edges",
+    "potential_internal_damage"
+  ]
+}

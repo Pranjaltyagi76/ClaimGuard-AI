@@ -1,0 +1,10 @@
+{
+  "valid_image": true,
+  "issue_type": "torn_packaging",
+  "object_part": "packaging",
+  "severity": "medium",
+  "damage_visible": true,
+  "risk_flags": [
+    "tampering_suspected"
+  ]
+}

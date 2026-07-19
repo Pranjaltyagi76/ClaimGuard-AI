@@ -1,0 +1,8 @@
+{
+  "valid_image": true,
+  "issue_type": "dent",
+  "object_part": "hood",
+  "severity": "medium",
+  "damage_visible": true,
+  "risk_flags": []
+}

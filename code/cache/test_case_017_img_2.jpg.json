@@ -1,0 +1,12 @@
+{
+  "valid_image": true,
+  "issue_type": "glass_shatter",
+  "object_part": "laptop screen",
+  "severity": "high",
+  "damage_visible": true,
+  "risk_flags": [
+    "sharp glass shards",
+    "unusable display",
+    "potential internal component damage"
+  ]
+}

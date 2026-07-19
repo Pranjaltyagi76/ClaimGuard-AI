@@ -1,0 +1,11 @@
+{
+  "valid_image": true,
+  "issue_type": "dent",
+  "object_part": "bumper",
+  "severity": "high",
+  "damage_visible": true,
+  "risk_flags": [
+    "scratch",
+    "stain"
+  ]
+}

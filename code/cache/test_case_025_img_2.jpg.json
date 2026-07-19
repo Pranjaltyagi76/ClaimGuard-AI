@@ -1,0 +1,8 @@
+{
+  "valid_image": true,
+  "issue_type": "missing_part",
+  "object_part": "keyboard keycap",
+  "severity": "medium",
+  "damage_visible": true,
+  "risk_flags": []
+}

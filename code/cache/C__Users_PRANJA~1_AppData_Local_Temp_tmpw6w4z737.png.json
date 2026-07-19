@@ -1,0 +1,8 @@
+{
+  "valid_image": true,
+  "issue_type": "dent",
+  "object_part": "car_fender",
+  "severity": "high",
+  "damage_visible": true,
+  "risk_flags": []
+}

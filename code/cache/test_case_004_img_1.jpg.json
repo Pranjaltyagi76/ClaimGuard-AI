@@ -1,0 +1,13 @@
+{
+  "valid_image": true,
+  "issue_type": "crack",
+  "object_part": "windshield",
+  "severity": "high",
+  "damage_visible": true,
+  "risk_flags": [
+    "safety_hazard",
+    "visibility_impairment",
+    "structural_integrity_compromised",
+    "potential_for_further_damage"
+  ]
+}

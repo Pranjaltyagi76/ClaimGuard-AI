@@ -1,0 +1,12 @@
+{
+  "valid_image": true,
+  "issue_type": "crushed_packaging",
+  "object_part": "cardboard box",
+  "severity": "high",
+  "damage_visible": true,
+  "risk_flags": [
+    "fragile_label_present",
+    "severe_structural_deformation",
+    "potential_content_damage"
+  ]
+}
