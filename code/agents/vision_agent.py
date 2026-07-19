@@ -29,8 +29,9 @@ genai.configure(
 # Override with GEMINI_MODEL (e.g. gemini-flash-latest) if you prefer.
 MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
-# Rate-limit handling for the batch run.
-MAX_RETRIES = 5
+# Rate-limit handling for the batch run. Both are env-configurable so the
+# interactive UI can fail fast (no long backoff) while the batch retries.
+MAX_RETRIES = int(os.getenv("GEMINI_MAX_RETRIES", "5"))
 RETRY_BASE_DELAY = 8  # seconds; doubles each retry (8, 16, 32, ...)
 # Proactive throttle to stay under free-tier RPM (~10/min). Configurable.
 THROTTLE_DELAY = float(os.getenv("GEMINI_THROTTLE", "5"))

@@ -1,11 +1,19 @@
 import streamlit as st
 import pandas as pd
 import os
+import sys
+import tempfile
 from PIL import Image
 try:
     import pillow_avif  # noqa: F401 - dataset images are AVIF (with .jpg names)
 except ImportError:
     pass
+
+# Make the local agents importable regardless of launch directory.
+# (Not a Streamlit command, so it is safe before set_page_config.)
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
 
 # -----------------------------------
 # PAGE CONFIG
@@ -16,6 +24,22 @@ st.set_page_config(
     page_icon="🛡️",
     layout="wide"
 )
+
+# Interactive tab must be snappy: no proactive throttle and no long retry
+# backoff (a rate-limited call should fail fast to manual review, not hang).
+# Set BEFORE the agents import (they read these at import time).
+os.environ.setdefault("GEMINI_THROTTLE", "0")
+os.environ.setdefault("GEMINI_MAX_RETRIES", "1")
+
+# Bridge Streamlit Cloud secrets -> env vars for the agents. Must come AFTER
+# set_page_config (st.secrets access counts as a Streamlit command). The agents
+# import lazily on button-click, so the key is set before vision_agent loads.
+try:
+    for _k in ("GEMINI_API_KEY", "GEMINI_MODEL"):
+        if _k in st.secrets:
+            os.environ[_k] = str(st.secrets[_k])
+except Exception:
+    pass
 
 # -----------------------------------
 # CUSTOM CSS
@@ -274,32 +298,136 @@ fraud risk assessment, and final decision making.
 """)
 
 # -----------------------------------
-# DEMO MODE
+# TRY IT LIVE (real multi-agent pipeline)
 # -----------------------------------
 
-st.markdown("## 🎬 Demo Mode")
+st.markdown("## 🧪 Try It Live")
+st.caption(
+    "Upload a damage photo (or pick a sample), describe the claim, and watch "
+    "all five agents run in real time."
+)
 
-if st.button("▶️ Run Guided Judge Demo"):
 
-    st.info("Running automated judge walkthrough...")
+def _run_live_pipeline(image_path, claim_text, claim_object):
+    """Run the full agent pipeline on one image + claim and render the steps."""
+    from agents.claim_agent import extract_claim
+    from agents.vision_agent import analyze_image
+    from agents.evidence_agent import check_evidence_standard
+    from agents.risk_agent import analyze_user_risk
+    from agents.decision_agent import decide
 
-    st.markdown("### Step 1: Claim Understanding")
-    st.write("AI extracts structured damage information from the claim.")
+    steps = st.container()
 
-    st.markdown("### Step 2: Vision Analysis")
-    st.write("Vision Agent analyzes uploaded evidence images.")
+    with steps:
+        # 1) Claim Agent
+        st.markdown("#### 📄 Claim Agent")
+        claim_info = extract_claim(claim_text)
+        st.json(claim_info)
 
-    st.markdown("### Step 3: Semantic Matching")
-    st.write("Damage categories are matched semantically.")
+        # 2) Vision Agent
+        st.markdown("#### 👁️ Vision Agent (Gemini)")
+        with st.spinner("Analyzing the image with Gemini..."):
+            vision_info = analyze_image(image_path)
+        if not vision_info.get("valid_image") and vision_info.get("issue_type") == "unknown":
+            st.warning(
+                "Vision could not analyze the image (missing API key, rate "
+                "limit, or unreadable image). The claim will route to manual "
+                "review — the system does not guess."
+            )
+        st.json(vision_info)
 
-    st.markdown("### Step 4: Evidence Evaluation")
-    st.write("Evidence Agent validates visual support.")
+        # 3) Evidence Agent
+        st.markdown("#### 📑 Evidence Agent")
+        evidence_met, evidence_reason = check_evidence_standard(claim_info, vision_info)
+        st.write(f"**Evidence standard met:** `{evidence_met}` — {evidence_reason}")
 
-    st.markdown("### Step 5: Risk Assessment")
-    st.write("Risk Agent estimates fraud indicators.")
+        # 4) Risk Agent
+        st.markdown("#### 🚨 Risk Agent")
+        risk_flags = analyze_user_risk({"user_claim": claim_text})
+        st.write("**Risk flags:** " + ", ".join(f"`{f}`" for f in risk_flags))
+        if "text_instruction_present" in risk_flags:
+            st.error("⚠️ Prompt-injection detected in the claim text — flagged, not obeyed.")
 
-    st.markdown("### Step 6: Final Decision")
-    st.success("Supported / Contradicted verdict generated.")
+        # 5) Decision Agent
+        st.markdown("#### ✅ Decision Agent")
+        decision = decide(claim_info, vision_info, claim_object)
+        status = decision["claim_status"]
+
+        if status == "supported":
+            st.success(f"**SUPPORTED** ✅ — {decision['reason']}")
+        elif status == "contradicted":
+            st.error(f"**CONTRADICTED** ❌ — {decision['reason']}")
+        else:
+            st.warning(f"**NOT ENOUGH INFORMATION** ⚠️ — {decision['reason']}")
+
+
+_have_key = bool(os.getenv("GEMINI_API_KEY"))
+if not _have_key:
+    st.info(
+        "ℹ️ Live vision needs a Gemini API key. Add `GEMINI_API_KEY` in the app's "
+        "**Settings → Secrets** to enable real-time analysis. The pipeline still "
+        "runs and will honestly route to manual review without it."
+    )
+
+# Friendly labels -> (image path, prefilled claim, object) for instant demos.
+# These map to already-analyzed images, so results are real and instant.
+SAMPLE_CASES = {
+    "🚗 Car — windshield (crack)": (
+        "images/test/case_004/img_1.jpg",
+        "A stone hit my windshield and it looks shattered.", "car"),
+    "🚗 Car — bumper (scratch)": (
+        "images/test/case_001/img_2.jpg",
+        "The front bumper of my car got scratched in a parking incident.", "car"),
+    "🚗 Car — door (dent)": (
+        "images/test/case_003/img_1.jpg",
+        "There is a deep dent on my car door.", "car"),
+}
+
+with st.form("live_form"):
+    st.markdown("**Fastest way to see it work:** pick a sample below (instant, "
+                "real results). Uploading your own photo needs live API quota.")
+
+    sample_choice = st.selectbox(
+        "▶️ Sample case (recommended)", ["(choose your own below)"] + list(SAMPLE_CASES),
+    )
+
+    col_a, col_b = st.columns([1, 1])
+    with col_a:
+        claim_object_live = st.selectbox("Object type", ["car", "laptop", "package"])
+        claim_text_live = st.text_area(
+            "Claim description",
+            value="The front bumper of my car is damaged after a parking incident.",
+            height=110,
+        )
+    with col_b:
+        uploaded = st.file_uploader(
+            "…or upload your own damage image",
+            type=["jpg", "jpeg", "png", "avif", "webp"],
+        )
+
+    submitted = st.form_submit_button("▶️ Run the multi-agent pipeline")
+
+if submitted:
+    live_image_path = None
+
+    if sample_choice in SAMPLE_CASES:
+        rel, claim_text_live, claim_object_live = SAMPLE_CASES[sample_choice]
+        live_image_path = os.path.join(DATASET_DIR, rel)
+    elif uploaded is not None:
+        suffix = os.path.splitext(uploaded.name)[1] or ".jpg"
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        tmp.write(uploaded.getbuffer())
+        tmp.flush()
+        live_image_path = tmp.name
+
+    if live_image_path is None:
+        st.warning("Please upload an image or pick a sample first.")
+    else:
+        try:
+            st.image(Image.open(live_image_path), caption="Evidence under review", width=360)
+        except Exception:
+            st.caption("(preview unavailable)")
+        _run_live_pipeline(live_image_path, claim_text_live, claim_object_live)
 
 # -----------------------------------
 # LOAD DATA
@@ -382,6 +510,27 @@ st.divider()
 
 st.subheader("📋 Processed Claims")
 
+_total_images = int(
+    df["image_paths"].astype(str).apply(lambda s: len([p for p in s.split(";") if p.strip()])).sum()
+)
+
+st.markdown(
+    f"""
+This is the **batch output** of ClaimGuard AI. We ran the full multi-agent
+pipeline on **all {len(df)} claims** ({_total_images} evidence images) from the
+test set and summarized every result here for review.
+
+Each row is **one claim**, processed automatically through all five agents —
+📄 claim understanding → 👁️ Gemini vision analysis → 📑 evidence check →
+🚨 fraud/risk scoring → ✅ final decision. Verdict mix: **{supported} supported**,
+**{contradicted} contradicted**, **{uncertain} routed to manual review**.
+
+> 💡 The table below is the summary. To inspect any single claim in detail —
+> its images, agent reasoning, and confidence — use the
+> **🔎 Claim Investigation Panel** further down.
+"""
+)
+
 st.dataframe(
     df,
     use_container_width=True
@@ -403,6 +552,18 @@ st.download_button(
 st.divider()
 
 st.subheader("🔎 Claim Investigation Panel")
+
+st.markdown(
+    """
+Want to **deep-dive the results one by one?** This is the place. Pick any user
+below to open that single claim and review everything ClaimGuard AI decided for
+it — the original customer conversation, the AI's verdict and reasoning,
+severity, confidence and fraud-risk scores, the flagged risks, and the actual
+evidence images side by side.
+
+Use it to **audit the system's judgment** on any individual case.
+"""
+)
 
 selected_user = st.selectbox(
     "Select User ID",
@@ -533,6 +694,19 @@ with right_panel:
 st.divider()
 
 st.subheader("🖼️ Evidence Images")
+
+_supporting = str(row.get("supporting_image_ids", "none"))
+
+st.markdown(
+    f"""
+These are the **actual evidence photos submitted with this claim** — the
+reference/test images our 👁️ Vision Agent inspected with Gemini. The system
+looks at **every image** (not just the first) and picks the one(s) that truly
+show the claimed damage, which is what it cites as proof for its verdict.
+
+**Image(s) supporting this decision:** `{_supporting}`
+"""
+)
 
 image_paths = str(
     row["image_paths"]
