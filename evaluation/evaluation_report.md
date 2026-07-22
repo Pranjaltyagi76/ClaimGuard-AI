@@ -1,24 +1,29 @@
 # ClaimGuard AI — Evaluation & Operational Analysis
 
-This report covers correctness evaluation on the labeled sample set and an
-operational analysis (model calls, tokens, cost, latency, and rate-limit
-strategy) for processing the full test set.
+This report covers how to evaluate the system, and an operational analysis
+(model calls, tokens, cost, latency, and rate-limit strategy) based on the
+**actual run** used to produce `output.csv`.
 
 ---
 
 ## 1. How to evaluate
 
-The labeled examples in `dataset/sample_claims.csv` carry the expected
-`claim_status`. Run:
+**Correctness (quality metrics):** the runnable harness in
+[`../evaluation_metrics/metrics.py`](../evaluation_metrics/metrics.py) computes
+accuracy, a confusion matrix, and per-class precision/recall/F1 against a
+labeled file:
 
 ```bash
-cd code
-python main.py          # runs the pipeline on the sample set and prints accuracy
+cd evaluation_metrics
+python metrics.py --gold ../dataset/sample_claims.csv --pred ../code/output.csv --column claim_status
 ```
 
-`main.py` compares predicted `claim_status` against the labeled value and
-reports accuracy. Use it to tune prompts/thresholds before generating the final
-`output.csv` for `dataset/claims.csv` via `python generate_output.py`.
+`code/main.py` also runs the pipeline on the labeled sample set and prints a
+quick accuracy number for prompt/threshold tuning before generating the final
+predictions with `python generate_output.py`.
+
+No accuracy figure is hard-coded here — it is computed from real labeled data
+when the harness is run.
 
 ---
 
@@ -32,35 +37,55 @@ reports accuracy. Use it to tune prompts/thresholds before generating the final
 | Risk Agent (fraud/injection/history) | Deterministic rules | No |
 | Decision Agent (final verdict) | Deterministic rules | No |
 
-**Design choice:** only the Vision Agent needs a multimodal model. Claim
-parsing, evidence checks, risk scoring, and the final decision are deterministic
-so they are free, instant, reproducible, and auditable. This keeps cost and
-latency proportional to the number of *images*, not the number of *stages*.
+**Design choice:** only the Vision Agent needs a multimodal model. The other
+four stages are deterministic — free, instant, reproducible, and auditable. Cost
+and latency scale with the number of *images*, not the number of *stages*.
 
 ---
 
-## 3. Volume (current test set)
+## 3. Volume (actual run)
 
 - Claims processed: **44**
-- Images processed: **82** (1–3 per claim)
-- Model calls: **82** vision calls (1 per image) + **0** text calls
-- Verdict mix: 28 supported / 16 contradicted
+- Evidence images referenced: **82** (1–3 per claim)
+- Images analyzed with live Gemini vision: **37**
+- The remaining images were **honestly routed to manual review** rather than
+  analyzed, because the free-tier **daily request quota** was reached during
+  development (see §6). The system reports these as `not_enough_information`
+  instead of guessing.
+
+**Verdict mix (44 claims):**
+
+| Verdict | Count |
+|---|---|
+| ✅ Supported | 13 |
+| ❌ Contradicted | 6 |
+| ⚠️ Not enough information (manual review) | 25 |
+
+This distribution reflects the system's core principle: when it cannot verify a
+claim from the images, it escalates to a human rather than approving or rejecting
+on a guess.
 
 ---
 
-## 4. Token & cost estimate
+## 4. Model
 
-Pricing assumption: **Gemini 2.5 Flash** (the model actually used), approx.
-**$0.30 / 1M input tokens** and **$2.50 / 1M output tokens** (image input
-billed as tokens by resolution).
+- **Vision model:** Gemini Flash tier (default `gemini-2.5-flash`, configurable
+  via `GEMINI_MODEL`). Model availability on free-tier keys shifts over time —
+  the code makes the model an env variable precisely so it can be swapped
+  without code changes.
+- **Text model calls:** none. Only images hit the API.
 
-Per image (approx.):
+---
 
-- Prompt text: ~250 input tokens
-- Image: ~250–1,000 input tokens (single tile, default resolution)
-- JSON output: ~80 output tokens
+## 5. Token & cost estimate
 
-| Metric | Per image | Full test set (82 images) |
+Pricing assumption: **Gemini 2.5 Flash**, approx. **$0.30 / 1M input tokens**
+and **$2.50 / 1M output tokens** (image input billed as tokens by resolution).
+
+Per image (approx.): ~250 prompt tokens + ~250–1,000 image tokens input, ~80
+tokens JSON output.
+
+| Metric | Per image | Full set (82 images) |
 |---|---|---|
 | Input tokens | ~1,000 | ~82,000 |
 | Output tokens | ~80 | ~6,560 |
@@ -68,45 +93,59 @@ Per image (approx.):
 | Output cost | — | ~$0.016 |
 | **Total** | — | **≈ $0.04 (a few cents)** |
 
-Even at 10× the volume this stays under $0.50, so cost is not the binding
-constraint — rate limits and latency are.
+Cost is negligible even at 10× the volume (< $0.50). **The binding constraint is
+rate limits, not money.**
 
 ---
 
-## 5. Latency & runtime
+## 6. Rate limits & mitigation (the real bottleneck)
 
-- Per vision call: ~1–3 s (Flash tier).
-- Sequential runtime for 82 images: ~2–4 minutes.
-- The dominant cost is network round-trips, not local compute.
+The free-tier key used has tight limits — in practice around **10 requests per
+minute** and roughly **20 requests per day** for the Flash model. Processing 82
+images in one sitting exceeds the daily cap, which is why part of the batch was
+routed to manual review rather than analyzed.
+
+Mitigations **implemented in the codebase**:
+
+1. **Per-image caching (`code/cache/`).** Each image's JSON result is cached and
+   committed, so re-runs and repeated images cost **zero** additional calls. The
+   cache key is path-independent, so cached results work across machines and on
+   the deployed app without any live call.
+2. **Proactive throttle (`GEMINI_THROTTLE`).** A configurable delay between calls
+   keeps the batch under the per-minute limit.
+3. **Exponential-backoff retry (`GEMINI_MAX_RETRIES`).** Transient `429`s wait
+   and retry (8s → 16s → 32s …) instead of failing.
+4. **Fast-fail for the interactive UI.** The live demo sets retries to 1 and no
+   throttle, so a rate-limited call returns immediately (to manual review)
+   rather than hanging the interface.
+5. **Honest failure.** On any API/parse error the Vision Agent returns
+   `unknown` / `valid_image=false` — a throttled or failed call degrades to
+   `not_enough_information`, never a fabricated verdict.
+6. **Deterministic non-vision stages.** 4 of 5 agents make no model calls, so
+   only images consume quota.
+
+**For production scale:** a paid key removes the daily cap; the batch would then
+run end-to-end in a few minutes using a bounded concurrent worker pool sized to
+the account's RPM limit.
 
 ---
 
-## 6. Rate limits (TPM/RPM) & mitigation strategy
+## 7. Latency & runtime
 
-Gemini Flash free/standard tiers cap requests-per-minute and tokens-per-minute.
-82 images can exceed a low RPM cap if fired in a tight loop.
-
-Strategies used / available in this codebase:
-
-1. **Caching (implemented).** `vision_agent.py` writes each image's JSON result
-   to `code/cache/`. Re-runs (and repeated images) cost **zero** additional
-   calls — critical during iterative prompt tuning.
-2. **Deterministic non-vision stages (implemented).** 4 of 5 agents make no
-   model calls, so only images consume quota.
-3. **Honest failure (implemented).** On any API/parse error the Vision Agent
-   returns `unknown`/`valid_image=false` instead of fabricating a result, so a
-   throttled call degrades to `not_enough_information` rather than a wrong
-   verdict.
-4. **Throttle / retry (recommended for scale).** Add a small sleep between calls
-   and exponential-backoff retry on 429s to stay under RPM. For large batches,
-   process concurrently with a bounded worker pool sized to the RPM limit.
+- Per vision call: ~2–8 s (Flash tier includes brief model "thinking" time).
+- With throttling to respect the per-minute limit, the batch runs over several
+  minutes; cached images are instant.
+- The dominant cost is network round-trips and rate-limit waits, not local
+  compute.
 
 ---
 
-## 7. Known limitations (honest)
+## 8. Known limitations (honest)
 
-- The Claim Agent uses rule-based keyword extraction (fast, deterministic) — it
-  can miss unusual phrasings; the Roadmap proposes an LLM-based extractor.
-- Severity and object-part cross-checks rely on the vision model's labels.
-- `supporting_image_ids` currently picks the image(s) where damage was detected;
+- Part of the batch is `not_enough_information` due to the free-tier daily cap,
+  not model inability — a paid key analyzes every image.
+- The Claim Agent uses deterministic keyword extraction; unusual phrasings can be
+  missed (an LLM-based extractor is on the roadmap).
+- Severity and object-part labels come from the vision model.
+- `supporting_image_ids` picks the image(s) where damage was detected;
   multi-image evidence fusion is a roadmap item.

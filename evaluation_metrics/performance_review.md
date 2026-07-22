@@ -37,10 +37,9 @@ direct assertions (see [`../Codex_context/testing_strategy.md`](../Codex_context
 | Metric | Value |
 | --- | --- |
 | Model calls | 1 per image (0 per non-vision stage) |
-| Images in test set | ~82 |
-| Est. cost (Gemini 1.5 Flash) | ≈ **$0.008** total |
-| Latency per image | ~1–3 s |
-| Batch runtime (sequential) | ~2–4 min |
+| Evidence images referenced | 82 (37 analyzed live; rest routed to manual review under the free-tier daily cap) |
+| Est. cost (Gemini 2.5 Flash) | ≈ **$0.04** for the full 82 images |
+| Latency per image | ~2–8 s (Flash tier) |
 | Repeat-run cost (cached) | **$0** |
 
 Details: [`../evaluation/evaluation_report.md`](../evaluation/evaluation_report.md).
